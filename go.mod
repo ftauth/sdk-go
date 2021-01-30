@@ -1,4 +1,4 @@
-module github.com/ftauth/sdk-go/v1
+module github.com/ftauth/sdk-go
 
 go 1.15
 
