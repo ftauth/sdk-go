@@ -6,8 +6,8 @@ import "fmt"
 // Implementations will vary by client, but all should be encrypted
 // or reasonably protected against attacks.
 type KeyStore interface {
-	Save(key, value []byte) *KeyStoreError
-	Get(key []byte) ([]byte, *KeyStoreError)
+	Save(key, value []byte) error
+	Get(key []byte) ([]byte, error)
 }
 
 // KeyStoreError represents an error in retrieving or saving keys to
@@ -29,14 +29,14 @@ type KeyStoreErrorCode int
 // KeyStoreErrorCodes
 const (
 	KeyStoreErrorCodeUnknown KeyStoreErrorCode = iota // an unknown error occurred
-	KeyStoreErrorAccess                               // error accessing the keychain (e.g. i/o error)
+	KeyStoreErrorCodeAccess                           // error accessing the keychain (e.g. i/o error)
 	KeyStoreErrorCodeKey                              // an error accessing the key (i.e. not found)
 )
 
 // Description provides a human-readable description of the error code.
 func (code KeyStoreErrorCode) Description() string {
 	switch code {
-	case KeyStoreErrorAccess:
+	case KeyStoreErrorCodeAccess:
 		return "The keychain is not accessible."
 	case KeyStoreErrorCodeKey:
 		return "The key was not found."
