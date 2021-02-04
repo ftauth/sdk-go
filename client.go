@@ -1,13 +1,20 @@
 package ftauth
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"net/url"
+	"path"
+	"sync"
 	"time"
 
+	"filippo.io/age"
 	"github.com/ftauth/ftauth/pkg/jwt"
 	"golang.org/x/oauth2"
 )
@@ -21,29 +28,26 @@ var (
 
 // Common keys.
 var (
-	KeyAccessToken  = []byte("access_token")
-	KeyRefreshToken = []byte("refresh_token")
-	keyPrivateKey   = []byte("private_key")
+	KeyAccessToken   = []byte("access_token")
+	KeyRefreshToken  = []byte("refresh_token")
+	keySigningKey    = []byte("signing_key")
+	keyEncryptionKey = []byte("encryption_key")
 )
 
 // Client communicates with HTTP services on behalf
 // of an authenticated user.
 type Client struct {
-	accessToken  *jwt.Token
-	refreshToken *jwt.Token
-	privateKey   *jwt.Key
-	httpClient   *http.Client
-	Config       *ClientConfig
-	KeyStore     KeyStore
-}
+	accessToken   *jwt.Token
+	refreshToken  *jwt.Token
+	signingKey    *jwt.Key
+	encryptionKey *age.X25519Identity
+	Config        *ClientConfig
+	KeyStore      KeyStore
+	OauthConfig   *oauth2.Config
 
-// if config.Authorizer == nil {
-// 	auth, err := DefaultAuthorizer(config.ClientConfig)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	config.Authorizer = auth
-// }
+	sync.RWMutex // protects httpClient
+	httpClient   *http.Client
+}
 
 // Config holds options for configuring the client.
 // Use DefaultOptions if unsure.
@@ -59,18 +63,38 @@ func NewClient(config *Config) (*Client, error) {
 		return nil, ErrInvalidKeyStore
 	}
 
+	gatewayURL, err := url.Parse(config.ClientConfig.GatewayURL)
+	if err != nil {
+		return nil, err
+	}
+	authURL := *gatewayURL
+	authURL.Path = path.Join(gatewayURL.Path, "authorize")
+
+	tokenURL := *gatewayURL
+	tokenURL.Path = path.Join(gatewayURL.Path, "token")
+
 	c := &Client{
 		KeyStore: config.KeyStore,
 		Config:   config.ClientConfig,
+		OauthConfig: &oauth2.Config{
+			ClientID: config.ClientConfig.ClientID,
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  authURL.String(),
+				TokenURL: tokenURL.String(),
+			},
+			RedirectURL: config.ClientConfig.RedirectURI,
+			Scopes:      config.ClientConfig.Scopes,
+		},
 	}
 
-	err := config.KeyStore.Save(KeyAccessToken, []byte("abcdefg"))
+	err = config.KeyStore.Save(KeyAccessToken, []byte("abcdefg"))
 	if err != nil {
 		return nil, err
 	}
 
 	err = c.Initialize()
 	if err != nil {
+		log.Println("Error initializing client: ", err)
 		return nil, err
 	}
 
@@ -88,66 +112,123 @@ func isErrKeyNotFound(err error) bool {
 func (c *Client) Initialize() error {
 	var validAccessToken bool
 
+	log.Println("Loading access token...")
 	accessJWT, err := c.KeyStore.Get(KeyAccessToken)
-	if err == nil && !isErrKeyNotFound(err) {
+	if err != nil && !isErrKeyNotFound(err) {
+		log.Println("Error loading access token: ", err)
 		return err
 	}
 	if accessJWT != nil {
+		log.Println("Access token found")
 		accessToken, err := jwt.Decode(string(accessJWT))
 		if err != nil {
 			return err
 		}
-		if accessToken.IsExpired() {
+		if !accessToken.IsExpired() {
 			c.accessToken = accessToken
 			validAccessToken = true
 		}
+	} else {
+		log.Println("Access token not found")
 	}
 
 	if validAccessToken {
+		var validRefreshToken bool
+		log.Println("Loading refresh token...")
 		refreshJWT, err := c.KeyStore.Get(KeyRefreshToken)
-		if err == nil && !isErrKeyNotFound(err) {
+		if err != nil && !isErrKeyNotFound(err) {
+			log.Println("Error loading refresh token: ", err)
 			return err
 		}
 		if refreshJWT != nil {
-			c.refreshToken, err = jwt.Decode(string(refreshJWT))
+			log.Println("Refresh token found")
+			refreshToken, err := jwt.Decode(string(refreshJWT))
 			if err != nil {
 				return err
 			}
+			if !refreshToken.IsExpired() {
+				c.refreshToken = refreshToken
+				validRefreshToken = true
+			}
+		} else {
+			log.Println("Refresh token not found")
+		}
+
+		if validRefreshToken {
+			log.Println("Validated tokens. Reloading HTTP client...")
+			token := &oauth2.Token{
+				AccessToken:  string(accessJWT),
+				RefreshToken: string(refreshJWT),
+				Expiry:       time.Unix(c.accessToken.Claims.ExpirationTime, 0),
+			}
+			c.httpClient = oauth2.NewClient(context.Background(), TokenSource(token))
 		}
 	}
 
-	privateJWK, err := c.KeyStore.Get(keyPrivateKey)
-	if err == nil && !isErrKeyNotFound(err) {
+	log.Println("Loading signing key...")
+	privateJWK, err := c.KeyStore.Get(keySigningKey)
+	if err != nil && !isErrKeyNotFound(err) {
+		log.Println("Error loading signing key: ", err)
 		return err
 	}
 	if privateJWK != nil {
-		c.privateKey, err = jwt.ParseJWK(string(privateJWK))
+		log.Println("Signing key found")
+		c.signingKey, err = jwt.ParseJWK(string(privateJWK))
 		if err != nil {
 			return err
 		}
 	} else {
-		privateKey, err := generatePrivateKey()
+		log.Println("Signing key not found")
+		log.Println("Generating signing key...")
+		privateKey, err := generatePrivateSigningKey()
 		if err != nil {
 			return err
 		}
-		c.privateKey, err = jwt.NewJWKFromRSAPrivateKey(privateKey)
+		c.signingKey, err = jwt.NewJWKFromRSAPrivateKey(privateKey)
 		if err != nil {
 			return err
 		}
-		b, err := json.Marshal(c.privateKey)
+		b, err := json.Marshal(c.signingKey)
 		if err != nil {
 			return err
 		}
-		err = c.KeyStore.Save(keyPrivateKey, b)
+		err = c.KeyStore.Save(keySigningKey, b)
 		if err != nil {
 			return err
 		}
 	}
 
+	log.Println("Loading encryption key...")
+	privateEncryptionKey, err := c.KeyStore.Get(keyEncryptionKey)
+	if err != nil && !isErrKeyNotFound(err) {
+		log.Println("Error loading encryption key: ", err)
+		return err
+	}
+	if privateEncryptionKey != nil {
+		log.Println("Encryption key found")
+		c.encryptionKey, err = age.ParseX25519Identity(string(privateEncryptionKey))
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Println("Encryption key not found")
+		log.Println("Generating encryption key...")
+		c.encryptionKey, err = age.GenerateX25519Identity()
+		if err != nil {
+			return err
+		}
+		err = c.KeyStore.Save(keyEncryptionKey, []byte(c.encryptionKey.String()))
+		if err != nil {
+			return err
+		}
+	}
+
+	log.Println("Client successfully loaded")
+
 	return nil
 }
 
-func generatePrivateKey() (*rsa.PrivateKey, error) {
+func generatePrivateSigningKey() (*rsa.PrivateKey, error) {
 	return rsa.GenerateKey(rand.Reader, 2048)
 }
 
@@ -171,9 +252,18 @@ func (c *Client) Token() (*oauth2.Token, error) {
 	}, nil
 }
 
+// TokenSource provides a refreshing token source linked to the KeyStore
+// which is compatible with the oauth2 library.
+func TokenSource(token *oauth2.Token) oauth2.TokenSource {
+	return oauth2.ReuseTokenSource(token, &tokenRefresher{
+		ctx:          context.Background(),
+		refreshToken: token.RefreshToken,
+	})
+}
+
 // IsAuthenticated returns true if the user has an authenticated HTTP client.
 func (c *Client) IsAuthenticated() bool {
-	if c.httpClient == nil {
+	if c.accessToken == nil {
 		return false
 	}
 	return true
@@ -181,22 +271,38 @@ func (c *Client) IsAuthenticated() bool {
 
 // Request performs an HTTP request on behalf of the authenticated user,
 // automatically refreshing credentials as needed.
-func (c *Client) Request(request *http.Request) (*http.Response, error) {
-	if !c.IsAuthenticated() {
+func (c *Client) Request(request *Request) (*http.Response, error) {
+	if !request.Public && !c.IsAuthenticated() {
 		return nil, ErrNotAuthenticated
 	}
 
-	// Append DPoP token
-	dpop, err := c.createDPoPToken(request)
+	var req *http.Request
+	var err error
+	if request.Body != nil {
+		body := bytes.NewBuffer(request.Body)
+		req, err = http.NewRequest(request.Method, request.URL, body)
+	} else {
+		req, err = http.NewRequest(request.Method, request.URL, nil)
+	}
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Add("DPoP", dpop)
 
-	return c.httpClient.Do(request)
+	// Append DPoP token
+	dpop, err := c.createDPoPToken(req)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("DPoP", dpop)
+
+	c.Lock()
+	defer c.Unlock()
+	return c.httpClient.Do(req)
 }
 
 // SetHTTPClient sets the HTTP client for internal use.
 func (c *Client) SetHTTPClient(client *http.Client) {
+	c.RLock()
+	defer c.RUnlock()
 	c.httpClient = client
 }

@@ -17,34 +17,49 @@ var (
 )
 
 // Authorizer handles authorization with the server, invoking
-// WebViews or HTTP requests as necessary to obtain an authenticated
-// HTTP client, e.g. via the oauth2 package.
+// WebViews or HTTP requests as necessary on a platform basis.
 type Authorizer interface {
-	Authorize() (*http.Client, error)
+	// Authorize returns a URL through which the user must authenticate.
+	// The client is responsible for listening to redirect steps and
+	// capturing the query parameters for use with Exchange.
+	Authorize() (string, error)
+
+	// Exchange communicates with the FTAuth server, exchanging the
+	// authorization code for an access + refresh token.
+	Exchange(authResp *AuthorizationCodeResponse) (*http.Client, error)
 }
 
 type defaultAuthorizer struct {
+	client *Client
 	config *clientcredentials.Config
 }
 
-func (auth *defaultAuthorizer) Authorize() (*http.Client, error) {
-	ctx := context.TODO()
+func (auth *defaultAuthorizer) Login() (*http.Client, error) {
+	ctx := context.Background()
 	return auth.config.Client(ctx), nil
+}
+
+func (auth *defaultAuthorizer) Authorize() (string, error) {
+	return "", ErrUnsupportedClientType
+}
+
+func (auth *defaultAuthorizer) Exchange(authResp *AuthorizationCodeResponse) (*http.Client, error) {
+	return nil, ErrUnsupportedClientType
 }
 
 // DefaultAuthorizer creates an Oauth2 confidential grant client.
 // Public clients should use their platform's implementation.
-func DefaultAuthorizer(config *ClientConfig) (Authorizer, error) {
+func (client *Client) DefaultAuthorizer(config *ClientConfig) (Authorizer, error) {
 	if config.ClientType == model.ClientTypePublic {
 		return nil, ErrUnsupportedClientType
 	}
-	gatewayURL, err := url.Parse(config.GatewayURL)
+	tokenURL, err := url.Parse(config.GatewayURL)
 	if err != nil {
 		return nil, err
 	}
-	tokenURL := *gatewayURL
-	tokenURL.Path = path.Join(gatewayURL.Path, "token")
+	tokenURL.Path = path.Join(tokenURL.Path, "token")
 	return &defaultAuthorizer{
+		client: client,
 		config: &clientcredentials.Config{
 			ClientID:     config.ClientID,
 			ClientSecret: config.ClientSecret,

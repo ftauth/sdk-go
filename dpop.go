@@ -12,7 +12,7 @@ import (
 
 // createDPoPToken creates and signs a DPoP token for an HTTP request.
 func (c *Client) createDPoPToken(req *http.Request) (string, error) {
-	publicKey := c.privateKey.PublicKey.(*rsa.PublicKey)
+	publicKey := c.signingKey.PublicKey.(*rsa.PublicKey)
 	jwk, err := jwt.NewJWKFromRSAPublicKey(publicKey)
 	if err != nil {
 		return "", err
@@ -47,5 +47,5 @@ func (c *Client) createDPoPToken(req *http.Request) (string, error) {
 		Header: header,
 		Claims: claims,
 	}
-	return token.Encode(c.privateKey)
+	return token.Encode(c.signingKey)
 }
