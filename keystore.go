@@ -8,6 +8,8 @@ import "fmt"
 type KeyStore interface {
 	Save(key, value []byte) error
 	Get(key []byte) ([]byte, error)
+	Delete(key []byte) error
+	Clear() error
 }
 
 // KeyStoreError represents an error in retrieving or saving keys to

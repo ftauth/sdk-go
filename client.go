@@ -16,6 +16,7 @@ import (
 
 	"filippo.io/age"
 	"github.com/ftauth/ftauth/pkg/jwt"
+	"github.com/ftauth/ftauth/pkg/model"
 	"golang.org/x/oauth2"
 )
 
@@ -87,11 +88,6 @@ func NewClient(config *Config) (*Client, error) {
 		},
 	}
 
-	err = config.KeyStore.Save(KeyAccessToken, []byte("abcdefg"))
-	if err != nil {
-		return nil, err
-	}
-
 	err = c.Initialize()
 	if err != nil {
 		log.Println("Error initializing client: ", err)
@@ -99,6 +95,63 @@ func NewClient(config *Config) (*Client, error) {
 	}
 
 	return c, nil
+}
+
+// CurrentUser returns the currently logged in user, if authenticated.
+func (c *Client) CurrentUser() (*model.UserData, error) {
+	if !c.IsAuthenticated() {
+		return nil, ErrNotAuthenticated
+	}
+	customClaims := c.accessToken.Claims.CustomClaims
+	if customClaims == nil {
+		return nil, jwt.ErrInvalidPayloadFormat
+	}
+	userInfo, ok := customClaims["userInfo"]
+	if !ok {
+		return nil, jwt.ErrInvalidPayloadFormat
+	}
+	user, ok := userInfo.(map[string]interface{})
+	if !ok {
+		return nil, jwt.ErrInvalidPayloadFormat
+	}
+	data, err := json.Marshal(user)
+	if err != nil {
+		return nil, jwt.ErrInvalidPayloadFormat
+	}
+
+	var userData model.UserData
+	err = json.Unmarshal(data, &userData)
+	if err != nil {
+		return nil, jwt.ErrInvalidPayloadFormat
+	}
+
+	return &userData, nil
+}
+
+// SaveTokens validates and stores the tokens in the Keystore.
+func (c *Client) SaveTokens(accessTokenJWT, refreshTokenJWT string) error {
+	// TODO: Validate tokens against server public key
+
+	var err error
+	c.accessToken, err = jwt.Decode(accessTokenJWT)
+	if err != nil {
+		return err
+	}
+	c.refreshToken, err = jwt.Decode(refreshTokenJWT)
+	if err != nil {
+		return err
+	}
+
+	err = c.KeyStore.Save(KeyAccessToken, []byte(accessTokenJWT))
+	if err != nil {
+		return err
+	}
+	err = c.KeyStore.Save(KeyRefreshToken, []byte(refreshTokenJWT))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func isErrKeyNotFound(err error) bool {
