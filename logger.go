@@ -20,6 +20,8 @@ func (nullLogger) Info(log string)  {}
 func (nullLogger) Warn(log string)  {}
 func (nullLogger) Error(log string) {}
 
+// TODO: Add line numbers / other logger config options for Golang logging
+
 // LoggerImpl wraps the Logger interface to define extra
 // Go-specific helper functions. These functions cannot be
 // part of the main interface but are helpful on the Go side.

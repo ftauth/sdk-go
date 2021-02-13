@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -91,7 +90,7 @@ func (ref *tokenRefresher) Token() (*oauth2.Token, error) {
 }
 
 func (ref *tokenRefresher) saveNewToken(token *oauth2.Token) error {
-	log.Println("Saving access and refresh tokens...")
+	// TODO: Make logger global lo("Saving access and refresh tokens...")
 	err := ref.client.KeyStore.Save(KeyAccessToken, []byte(token.AccessToken))
 	if err != nil {
 		return err

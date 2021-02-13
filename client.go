@@ -7,8 +7,6 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -46,7 +44,7 @@ type Client struct {
 	Config        *ClientConfig
 	KeyStore      KeyStore
 	OauthConfig   *model.OAuthConfig
-	Logger        Logger
+	*LoggerImpl
 
 	sync.RWMutex // protects httpClient
 	httpClient   *http.Client
@@ -66,7 +64,7 @@ func NewClient(config *Config) (*Client, error) {
 	if config.KeyStore == nil {
 		return nil, ErrInvalidKeyStore
 	}
-	if config.Logger == nil {
+	if config.Logger == nil || config.Logger.Logger == nil {
 		config.Logger = NullLogger
 	}
 
@@ -84,8 +82,9 @@ func NewClient(config *Config) (*Client, error) {
 	jwksURL.Path = path.Join(gatewayURL.Path, "jwks.json")
 
 	c := &Client{
-		KeyStore: config.KeyStore,
-		Config:   config.ClientConfig,
+		KeyStore:   config.KeyStore,
+		Config:     config.ClientConfig,
+		LoggerImpl: config.Logger,
 
 		// Default provider is FTAuth
 		OauthConfig: &model.OAuthConfig{
@@ -105,7 +104,7 @@ func NewClient(config *Config) (*Client, error) {
 
 	err = c.Initialize()
 	if err != nil {
-		c.Logger.Error(fmt.Sprintln("Error initializing client: ", err))
+		c.Errorln("Error initializing client: ", err)
 		return nil, err
 	}
 
@@ -187,14 +186,14 @@ func isErrKeyNotFound(err error) bool {
 func (c *Client) Initialize() error {
 	var validAccessToken bool
 
-	c.Logger.Debug("Loading access token...")
+	c.Debugln("Loading access token...")
 	accessJWT, err := c.KeyStore.Get(KeyAccessToken)
 	if err != nil && !isErrKeyNotFound(err) {
-		log.Println("Error loading access token: ", err)
+		c.Errorln("Error loading access token: ", err)
 		return err
 	}
 	if accessJWT != nil {
-		log.Println("Access token found")
+		c.Debugln("Access token found")
 		accessToken, err := jwt.Decode(string(accessJWT))
 		if err != nil {
 			return err
@@ -204,19 +203,19 @@ func (c *Client) Initialize() error {
 			validAccessToken = true
 		}
 	} else {
-		log.Println("Access token not found")
+		c.Debugln("Access token not found")
 	}
 
 	if validAccessToken {
 		var validRefreshToken bool
-		log.Println("Loading refresh token...")
+		c.Debugln("Loading refresh token...")
 		refreshJWT, err := c.KeyStore.Get(KeyRefreshToken)
 		if err != nil && !isErrKeyNotFound(err) {
-			log.Println("Error loading refresh token: ", err)
+			c.Errorln("Error loading refresh token: ", err)
 			return err
 		}
 		if refreshJWT != nil {
-			log.Println("Refresh token found")
+			c.Debugln("Refresh token found")
 			refreshToken, err := jwt.Decode(string(refreshJWT))
 			if err != nil {
 				return err
@@ -226,11 +225,11 @@ func (c *Client) Initialize() error {
 				validRefreshToken = true
 			}
 		} else {
-			log.Println("Refresh token not found")
+			c.Debugln("Refresh token not found")
 		}
 
 		if validRefreshToken {
-			log.Println("Validated tokens. Reloading HTTP client...")
+			c.Debugln("Validated tokens. Reloading HTTP client...")
 			token := &oauth2.Token{
 				AccessToken:  string(accessJWT),
 				RefreshToken: string(refreshJWT),
@@ -240,21 +239,21 @@ func (c *Client) Initialize() error {
 		}
 	}
 
-	log.Println("Loading signing key...")
+	c.Debugln("Loading signing key...")
 	privateJWK, err := c.KeyStore.Get(keySigningKey)
 	if err != nil && !isErrKeyNotFound(err) {
-		log.Println("Error loading signing key: ", err)
+		c.Errorln("Error loading signing key: ", err)
 		return err
 	}
 	if privateJWK != nil {
-		log.Println("Signing key found")
+		c.Debugln("Signing key found")
 		c.signingKey, err = jwt.ParseJWK(string(privateJWK))
 		if err != nil {
 			return err
 		}
 	} else {
-		log.Println("Signing key not found")
-		log.Println("Generating signing key...")
+		c.Debugln("Signing key not found")
+		c.Debugln("Generating signing key...")
 		privateKey, err := generatePrivateSigningKey()
 		if err != nil {
 			return err
@@ -273,21 +272,21 @@ func (c *Client) Initialize() error {
 		}
 	}
 
-	log.Println("Loading encryption key...")
+	c.Debugln("Loading encryption key...")
 	privateEncryptionKey, err := c.KeyStore.Get(keyEncryptionKey)
 	if err != nil && !isErrKeyNotFound(err) {
-		log.Println("Error loading encryption key: ", err)
+		c.Errorln("Error loading encryption key: ", err)
 		return err
 	}
 	if privateEncryptionKey != nil {
-		log.Println("Encryption key found")
+		c.Debugln("Encryption key found")
 		c.encryptionKey, err = age.ParseX25519Identity(string(privateEncryptionKey))
 		if err != nil {
 			return err
 		}
 	} else {
-		log.Println("Encryption key not found")
-		log.Println("Generating encryption key...")
+		c.Debugln("Encryption key not found")
+		c.Debugln("Generating encryption key...")
 		c.encryptionKey, err = age.GenerateX25519Identity()
 		if err != nil {
 			return err
@@ -298,7 +297,7 @@ func (c *Client) Initialize() error {
 		}
 	}
 
-	log.Println("Client successfully loaded")
+	c.Infoln("Client successfully loaded")
 
 	return nil
 }

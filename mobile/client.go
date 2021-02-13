@@ -86,6 +86,8 @@ func providerFromEnum(enum int) model.Provider {
 
 // NewClient creates a new FTAuth client
 func NewClient(config *Config) (*Client, error) {
+	// TODO: Perform validation on the config
+
 	client, err := ft.NewClient((*ft.Config)(config))
 	if err != nil {
 		return nil, err
@@ -302,9 +304,12 @@ func NewClientOptions(
 		return nil, err
 	}
 
+	setupLogger(logger)
+
 	return &Config{
 		KeyStore:     keyStore,
 		ClientConfig: &clientConfig,
+		Logger:       &ft.LoggerImpl{Logger: logger},
 	}, nil
 }
 
