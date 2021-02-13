@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -44,7 +45,8 @@ type Client struct {
 	encryptionKey *age.X25519Identity
 	Config        *ClientConfig
 	KeyStore      KeyStore
-	OauthConfig   *oauth2.Config
+	OauthConfig   *model.OAuthConfig
+	Logger        Logger
 
 	sync.RWMutex // protects httpClient
 	httpClient   *http.Client
@@ -54,6 +56,7 @@ type Client struct {
 // Use DefaultOptions if unsure.
 type Config struct {
 	KeyStore     KeyStore
+	Logger       *LoggerImpl
 	ClientConfig *ClientConfig
 }
 
@@ -62,6 +65,9 @@ type Config struct {
 func NewClient(config *Config) (*Client, error) {
 	if config.KeyStore == nil {
 		return nil, ErrInvalidKeyStore
+	}
+	if config.Logger == nil {
+		config.Logger = NullLogger
 	}
 
 	gatewayURL, err := url.Parse(config.ClientConfig.GatewayURL)
@@ -74,27 +80,43 @@ func NewClient(config *Config) (*Client, error) {
 	tokenURL := *gatewayURL
 	tokenURL.Path = path.Join(gatewayURL.Path, "token")
 
+	jwksURL := *gatewayURL
+	jwksURL.Path = path.Join(gatewayURL.Path, "jwks.json")
+
 	c := &Client{
 		KeyStore: config.KeyStore,
 		Config:   config.ClientConfig,
-		OauthConfig: &oauth2.Config{
-			ClientID: config.ClientConfig.ClientID,
-			Endpoint: oauth2.Endpoint{
-				AuthURL:  authURL.String(),
-				TokenURL: tokenURL.String(),
+
+		// Default provider is FTAuth
+		OauthConfig: &model.OAuthConfig{
+			Provider: model.ProviderFTAuth,
+			Config: &oauth2.Config{
+				ClientID: config.ClientConfig.ClientID,
+				Endpoint: oauth2.Endpoint{
+					AuthURL:  authURL.String(),
+					TokenURL: tokenURL.String(),
+				},
+				RedirectURL: config.ClientConfig.RedirectURI,
+				Scopes:      config.ClientConfig.Scopes,
 			},
-			RedirectURL: config.ClientConfig.RedirectURI,
-			Scopes:      config.ClientConfig.Scopes,
+			JWKSetURL: jwksURL.String(),
 		},
 	}
 
 	err = c.Initialize()
 	if err != nil {
-		log.Println("Error initializing client: ", err)
+		c.Logger.Error(fmt.Sprintln("Error initializing client: ", err))
 		return nil, err
 	}
 
 	return c, nil
+}
+
+// Configure initializes OAuth information for the FTAuth client.
+// Depending on the provider, for example, it will change how we
+// initialize it.
+func (c *Client) Configure(oauthConfig *model.OAuthConfig) {
+	c.OauthConfig = oauthConfig
 }
 
 // CurrentUser returns the currently logged in user, if authenticated.
@@ -165,7 +187,7 @@ func isErrKeyNotFound(err error) bool {
 func (c *Client) Initialize() error {
 	var validAccessToken bool
 
-	log.Println("Loading access token...")
+	c.Logger.Debug("Loading access token...")
 	accessJWT, err := c.KeyStore.Get(KeyAccessToken)
 	if err != nil && !isErrKeyNotFound(err) {
 		log.Println("Error loading access token: ", err)

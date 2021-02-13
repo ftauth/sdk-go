@@ -1,0 +1,56 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  test-go:
+    name: Test Go
+    strategy:
+      matrix:
+        go-version: [1.15]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    services:
+      ftauth:
+        image: ftauth/ftauth:latest
+        ports:
+        - 8080:8080
+        options: -e FTAUTH_SERVER_PORT=8080 -e FTAUTH_OAUTH_ADMIN_CLIENTID="3cf9a7ac-9198-469e-92a7-cc2f15d8b87d"
+    container: chromedp/headless-shell:stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Container
+        run: |
+          apt update && \
+          apt install -y \
+            ca-certificates \
+            git \
+            make \
+            curl
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Configure git for private modules
+        env:
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: git config --global url."https://dnys1:${TOKEN}@github.com".insteadOf "https://github.com"
+      - name: Run Tests
+        env:
+          FTAUTH_SERVER_HOST: ftauth
+          FTAUTH_SERVER_PORT: ${{ job.services.ftauth.ports[8080] }}
+        run: make test
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.txt
+          fail_ci_if_error: false
+          verbose: true

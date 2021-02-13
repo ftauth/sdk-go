@@ -25,6 +25,10 @@ type AuthorizationCodeResponse struct {
 	Error error
 }
 
+func (authResp *AuthorizationCodeResponse) String() string {
+	return fmt.Sprintf("{Code: %s, State: %s, Error: %v}", authResp.Code, authResp.State, authResp.Error)
+}
+
 type tokenRefresher struct {
 	ctx          context.Context
 	client       *Client
