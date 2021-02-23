@@ -58,6 +58,14 @@ type Config struct {
 	ClientConfig *ClientConfig
 }
 
+// Valid returns nil if the config is valid.
+func (config *Config) Valid() error {
+	if err := config.ClientConfig.Valid(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // NewClient creates a new FTAuth client with the given options.
 // Use DefaultOptions if unsure.
 func NewClient(config *Config) (*Client, error) {

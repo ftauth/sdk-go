@@ -1,10 +1,14 @@
-OUTPUT := ../sdk-ios/FTAuthInternal.framework
+IOS_OUTPUT := ../sdk-ios/FTAuthInternal.framework
+ANDROID_OUTPUT := ../sdk-android/ftauthinternal/ftauthinternal.aar
 CODECOV := coverage.txt
 
-.PHONY: build
-build: clean
-	GOPRIVATE=github.com/ftauth gomobile bind -target ios -o $(OUTPUT) -v ./mobile
+.PHONY: ios
+build:
+	GOPRIVATE=github.com/ftauth gomobile bind -target ios -o $(IOS_OUTPUT) -v ./mobile
 
+.PHONY: android
+android:
+	GOPRIVATE=github.com/ftauth gomobile bind -target android -o $(ANDROID_OUTPUT) -v ./mobile
 
 .PHONY: test
 test:
@@ -12,4 +16,4 @@ test:
 
 .PHONY: clean
 clean:
-	rm -rf $(OUTPUT)
+	rm -rf $(IOS_OUTPUT) $(ANDROID_OUTPUT)

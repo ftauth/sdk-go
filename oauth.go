@@ -1,7 +1,6 @@
 package ftauth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,9 +8,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
+	"strings"
 	"time"
 
+	"github.com/ftauth/ftauth/pkg/model"
 	"golang.org/x/oauth2"
 )
 
@@ -43,14 +43,14 @@ func (ref *tokenRefresher) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	tokenEndpoint.Path = path.Join(tokenEndpoint.Path, "token")
+	tokenEndpoint.Path = tokenEndpoint.Path + "/token"
 
 	body := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {ref.refreshToken},
 	}
 
-	buf := bytes.NewBuffer([]byte(body.Encode()))
+	buf := strings.NewReader(body.Encode())
 	resp, err := http.Post(tokenEndpoint.String(), "application/json", buf)
 	if err != nil {
 		return nil, err
@@ -58,12 +58,7 @@ func (ref *tokenRefresher) Token() (*oauth2.Token, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		var response struct {
-			AccessToken  string `json:"access_token"`
-			TokenType    string `json:"token_type"`
-			RefreshToken string `json:"refresh_token"`
-			ExpiresIn    int    `json:"expires_in"`
-		}
+		var response model.TokenResponse
 		err = json.NewDecoder(resp.Body).Decode(&response)
 		if err != nil {
 			return nil, err

@@ -2,14 +2,15 @@ package ftauthinternal
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ftauth/ftauth/pkg/model"
+	"github.com/ftauth/ftauth/pkg/oauth"
 	ft "github.com/ftauth/sdk-go"
 	"golang.org/x/oauth2"
 )
@@ -65,9 +66,43 @@ type Client struct {
 	webView      WebViewLauncher
 }
 
+// ClientConfig holds client options and settings.
+type ClientConfig ft.ClientConfig
+
+// NewClientConfig creates a new object holding all the information
+// needed to initialize an FTAuth client.
+func NewClientConfig(
+	gatewayURL string,
+	clientID string,
+	clientSecret string,
+	clientType string,
+	redirectURI string,
+	scope string,
+	timeout int,
+) (*ClientConfig, error) {
+	config := &ft.ClientConfig{
+		GatewayURL:   gatewayURL,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		ClientType:   model.ClientType(clientType),
+		RedirectURI:  redirectURI,
+		Scopes:       strings.Fields(scope),
+		Timeout:      uint(timeout),
+	}
+	if err := config.Valid(); err != nil {
+		return nil, err
+	}
+	return (*ClientConfig)(config), nil
+}
+
 // Config holds options for configuring the client.
 // Use DefaultOptions if unsure.
 type Config ft.Config
+
+// GetClientConfig returns the configured client options.
+func (config *Config) GetClientConfig() *ClientConfig {
+	return (*ClientConfig)(config.ClientConfig)
+}
 
 func providerFromEnum(enum int) model.Provider {
 	switch enum {
@@ -86,9 +121,13 @@ func providerFromEnum(enum int) model.Provider {
 
 // NewClient creates a new FTAuth client
 func NewClient(config *Config) (*Client, error) {
-	// TODO: Perform validation on the config
+	ftConfig := (*ft.Config)(config)
 
-	client, err := ft.NewClient((*ft.Config)(config))
+	if err := ftConfig.Valid(); err != nil {
+		return nil, err
+	}
+
+	client, err := ft.NewClient(ftConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +204,9 @@ func (rt *exchangeRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 
 	req2 := cloneRequest(req)
 
-	// TODO: Check RFC - which base64 encoding to use?
-	basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(rt.clientID+":"))
+	basicAuth := oauth.CreateBasicAuthorization(rt.clientID, "")
 	req2.Header.Add("Authorization", basicAuth)
+
 	return http.DefaultTransport.RoundTrip(req2)
 }
 
@@ -244,28 +283,34 @@ func (c *Client) Login(provider int, webView WebViewLauncher, completion LoginCo
 		log.Infoln("Waiting for client response...")
 	}()
 
-	select {
-	case err := <-c.errCh:
-		log.Errorln("Error launching URL: ", err)
-		completion.Complete(nil, err)
-		return
-	case authResp := <-c.resCh:
-		log.Debugln("Recevied authorization response: ", authResp)
-		client, err := c.Exchange(authResp)
-		if err != nil {
+	for {
+		select {
+		case err := <-c.errCh:
+			log.Errorln("Error launching URL: ", err)
 			completion.Complete(nil, err)
 			return
-		}
-		c.SetHTTPClient(client)
+		case authResp := <-c.resCh:
+			log.Debugln("Recevied authorization response: ", authResp)
+			client, err := c.Exchange(authResp)
+			if err != nil {
+				completion.Complete(nil, err)
+				return
+			}
+			c.SetHTTPClient(client)
 
-		user, err := c.CurrentUser()
-		if err != nil {
-			completion.Complete(nil, err)
+			user, err := c.CurrentUser()
+			if err != nil {
+				completion.Complete(nil, err)
+				return
+			}
+
+			log.Infoln("Logged in with user: ", user)
+
+			completion.Complete((*UserData)(user), nil)
 			return
+		case <-time.After(5 * time.Second):
+			log.Debugln("Waiting for client response...")
 		}
-
-		completion.Complete((*UserData)(user), nil)
-		return
 	}
 }
 
@@ -289,9 +334,9 @@ func setupLogger(logger Logger) {
 	log = &ft.LoggerImpl{Logger: logger}
 }
 
-// NewClientOptions creates an options object for configuring
-// an FTAuth client.
-func NewClientOptions(
+// NewConfigWithJSON creates an options object for configuring
+// an FTAuth client with client config in JSON format.
+func NewConfigWithJSON(
 	keyStore KeyStore,
 	logger Logger,
 	clientConfigJSON []byte,
@@ -300,7 +345,17 @@ func NewClientOptions(
 	if err := json.Unmarshal(clientConfigJSON, &clientConfig); err != nil {
 		return nil, err
 	}
-	if err := clientConfig.Valid(); err != nil {
+	return NewConfig(keyStore, logger, (*ClientConfig)(&clientConfig))
+}
+
+// NewConfig creates an options object for configuring
+// an FTAuth client.
+func NewConfig(
+	keyStore KeyStore,
+	logger Logger,
+	clientConfig *ClientConfig,
+) (*Config, error) {
+	if err := (*ft.ClientConfig)(clientConfig).Valid(); err != nil {
 		return nil, err
 	}
 
@@ -308,7 +363,7 @@ func NewClientOptions(
 
 	return &Config{
 		KeyStore:     keyStore,
-		ClientConfig: &clientConfig,
+		ClientConfig: (*ft.ClientConfig)(clientConfig),
 		Logger:       &ft.LoggerImpl{Logger: logger},
 	}, nil
 }
