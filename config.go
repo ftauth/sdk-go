@@ -26,12 +26,9 @@ func (c *ClientConfig) Valid() error {
 	if c.GatewayURL == "" {
 		return errInvalidField("gateway_url", "empty")
 	}
-	uri, err := url.Parse(c.GatewayURL)
+	_, err := url.Parse(c.GatewayURL)
 	if err != nil {
 		return errInvalidField("gateway_url", err.Error())
-	}
-	if uri.Scheme == "http" && uri.Hostname() != "localhost" {
-		return errInvalidField("gateway_url", "http scheme unsupported")
 	}
 	if c.ClientID == "" {
 		return errInvalidField("client_id", "empty")
