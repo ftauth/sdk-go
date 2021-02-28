@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/ftauth/ftauth/pkg/jwt"
 	"github.com/ftauth/ftauth/pkg/model"
 )
 
@@ -16,6 +17,7 @@ type ClientConfig struct {
 	RedirectURI  string           `json:"redirect_uri"`
 	Scopes       []string         `json:"scopes"`
 	Timeout      uint             `json:"timeout"`
+	keySet       *jwt.KeySet      `json:"-"`
 }
 
 // Valid returns an error if there are missing or invalid fields,

@@ -16,6 +16,7 @@ import (
 	"filippo.io/age"
 	"github.com/ftauth/ftauth/pkg/jwt"
 	"github.com/ftauth/ftauth/pkg/model"
+	"github.com/ftauth/ftauth/pkg/oauth"
 	"golang.org/x/oauth2"
 )
 
@@ -266,7 +267,7 @@ func (c *Client) Initialize() error {
 		if err != nil {
 			return err
 		}
-		c.signingKey, err = jwt.NewJWKFromRSAPrivateKey(privateKey)
+		c.signingKey, err = jwt.NewJWKFromRSAPrivateKey(privateKey, jwt.AlgorithmPSSSHA256)
 		if err != nil {
 			return err
 		}
@@ -371,7 +372,7 @@ func (c *Client) Request(request *Request) (*http.Response, error) {
 	}
 
 	// Append DPoP token
-	dpop, err := c.createDPoPToken(req)
+	dpop, err := oauth.CreateProofToken(c.signingKey, request.Method, request.URL)
 	if err != nil {
 		return nil, err
 	}

@@ -38,10 +38,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Configure git for private modules
-        env:
-          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-        run: git config --global url."https://dnys1:${TOKEN}@github.com".insteadOf "https://github.com"
       - name: Run Tests
         env:
           FTAUTH_SERVER_HOST: ftauth
