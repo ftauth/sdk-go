@@ -12,7 +12,7 @@ android:
 
 .PHONY: test
 test:
-	CGO_ENABLED=0 go test -v -coverprofile=$(CODECOV) .
+	CGO_ENABLED=0 go test -v -coverprofile=$(CODECOV) ./...
 
 .PHONY: clean
 clean:
