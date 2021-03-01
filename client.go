@@ -7,6 +7,8 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -132,30 +134,36 @@ func (c *Client) CurrentUser() (*model.UserData, error) {
 	if !c.IsAuthenticated() {
 		return nil, ErrNotAuthenticated
 	}
-	customClaims := c.accessToken.Claims.CustomClaims
-	if customClaims == nil {
-		return nil, jwt.ErrInvalidPayloadFormat
-	}
-	userInfo, ok := customClaims["userInfo"]
-	if !ok {
-		return nil, jwt.ErrInvalidPayloadFormat
-	}
-	user, ok := userInfo.(map[string]interface{})
-	if !ok {
-		return nil, jwt.ErrInvalidPayloadFormat
-	}
-	data, err := json.Marshal(user)
+	userURL, err := url.Parse(c.Config.GatewayURL)
 	if err != nil {
-		return nil, jwt.ErrInvalidPayloadFormat
+		return nil, err
+	}
+	userURL.Path = "/user"
+
+	request, err := http.NewRequest(http.MethodGet, userURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("%d %s", resp.StatusCode, body)
 	}
 
-	var userData model.UserData
-	err = json.Unmarshal(data, &userData)
-	if err != nil {
-		return nil, jwt.ErrInvalidPayloadFormat
+	var user model.UserData
+	if err := json.Unmarshal(body, &user); err != nil {
+		return nil, err
 	}
 
-	return &userData, nil
+	return &user, nil
 }
 
 // SaveTokens validates and stores the tokens in the Keystore.

@@ -1,0 +1,17 @@
+version: '3'
+services:
+  ftauth:
+    image: 'ftauth/ftauth:latest'
+    ports:
+    - 8080:8080
+    environment:
+    - FTAUTH_SERVER_HOST=ftauth
+    - FTAUTH_SERVER_PORT=8080
+    - FTAUTH_OAUTH_ADMIN_USERNAME=admin
+    - FTAUTH_OAUTH_ADMIN_PASSWORD=password
+    - FTAUTH_OAUTH_ADMIN_CLIENTID=3cf9a7ac-9198-469e-92a7-cc2f15d8b87d
+  tester:
+    image: 'chromedp/headless-shell:stable'
+    volumes:
+      - .:/tester
+      - ../..:/sdk-go
