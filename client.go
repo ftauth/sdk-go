@@ -47,7 +47,7 @@ type Client struct {
 	Config        *ClientConfig
 	KeyStore      KeyStore
 	OauthConfig   *model.OAuthConfig
-	*LoggerImpl
+	*LoggerExt
 
 	sync.RWMutex // protects httpClient
 	httpClient   *http.Client
@@ -57,7 +57,7 @@ type Client struct {
 // Use DefaultOptions if unsure.
 type Config struct {
 	KeyStore     KeyStore
-	Logger       *LoggerImpl
+	Logger       *LoggerExt
 	ClientConfig *ClientConfig
 }
 
@@ -93,9 +93,9 @@ func NewClient(config *Config) (*Client, error) {
 	jwksURL.Path = path.Join(gatewayURL.Path, "jwks.json")
 
 	c := &Client{
-		KeyStore:   config.KeyStore,
-		Config:     config.ClientConfig,
-		LoggerImpl: config.Logger,
+		KeyStore:  config.KeyStore,
+		Config:    config.ClientConfig,
+		LoggerExt: config.Logger,
 
 		// Default provider is FTAuth
 		OauthConfig: &model.OAuthConfig{

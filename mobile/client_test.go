@@ -86,7 +86,7 @@ func (ks *mockKeyStore) Delete(key []byte) error {
 }
 
 type mockWebView struct {
-	t *testing.T
+	client *Client
 }
 
 func (webView *mockWebView) LaunchURL(url string, completer AuthorizationCodeCompleter) {
@@ -144,7 +144,7 @@ func (webView *mockWebView) LaunchURL(url string, completer AuthorizationCodeCom
 	if ctx.Err() != nil {
 		// Ignore if we canceled context
 	} else {
-		webView.t.Errorf("chromedp error: %v\n", chromeErr)
+		webView.client.errCh <- chromeErr
 		return
 	}
 
@@ -163,6 +163,7 @@ func TestRequest(t *testing.T) {
 	client, err := NewClient(&Config{
 		KeyStore:     newMockKeyStore(),
 		ClientConfig: mockClientConfig,
+		Logger:       ftauth.StdLogger,
 	})
 	require.NoError(t, err)
 
@@ -184,9 +185,10 @@ func TestLogin(t *testing.T) {
 	client, err := NewClient(&Config{
 		KeyStore:     newMockKeyStore(),
 		ClientConfig: mockClientConfig,
+		Logger:       ftauth.StdLogger,
 	})
 	require.NoError(t, err)
 
-	webViewLauncher := &mockWebView{t}
+	webViewLauncher := &mockWebView{client}
 	client.Login(0, webViewLauncher, &mockLoginCompletion{t})
 }

@@ -331,7 +331,7 @@ func (c *Client) SignInWithApple(user *SignInWithAppleData) (*UserData, error) {
 }
 
 func setupLogger(logger Logger) {
-	log = &ft.LoggerImpl{Logger: logger}
+	log = &ft.LoggerExt{Logger: logger}
 }
 
 // NewConfigWithJSON creates an options object for configuring
@@ -364,7 +364,7 @@ func NewConfig(
 	return &Config{
 		KeyStore:     keyStore,
 		ClientConfig: (*ft.ClientConfig)(clientConfig),
-		Logger:       &ft.LoggerImpl{Logger: logger},
+		Logger:       &ft.LoggerExt{Logger: logger},
 	}, nil
 }
 

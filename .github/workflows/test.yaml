@@ -48,6 +48,7 @@ jobs:
           FTAUTH_SERVER_HOST: ftauth
           FTAUTH_SERVER_PORT: ${{ job.services.ftauth.ports[8080] }}
         run: make test
+        timeout-minutes: 2
       - name: Upload Coverage
         uses: codecov/codecov-action@v1
         with:
