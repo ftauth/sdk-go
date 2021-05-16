@@ -6,9 +6,9 @@ import "fmt"
 // Implementations will vary by client, but all should be encrypted
 // or reasonably protected against attacks.
 type KeyStore interface {
-	Save(key, value []byte) error
-	Get(key []byte) ([]byte, error)
-	Delete(key []byte) error
+	Save(key string, value []byte) error
+	Get(key string) ([]byte, error)
+	Delete(key string) error
 	Clear() error
 }
 

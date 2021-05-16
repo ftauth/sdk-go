@@ -31,10 +31,10 @@ var (
 
 // Common keys.
 var (
-	KeyAccessToken   = []byte("access_token")
-	KeyRefreshToken  = []byte("refresh_token")
-	keySigningKey    = []byte("signing_key")
-	keyEncryptionKey = []byte("encryption_key")
+	KeyAccessToken   = "access_token"
+	KeyRefreshToken  = "refresh_token"
+	keySigningKey    = "signing_key"
+	keyEncryptionKey = "encryption_key"
 )
 
 // Client communicates with HTTP services on behalf

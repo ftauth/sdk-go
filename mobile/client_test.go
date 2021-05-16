@@ -63,16 +63,16 @@ func newMockKeyStore() *mockKeyStore {
 	return &mockKeyStore{make(map[string]string)}
 }
 
-func (ks *mockKeyStore) Save(key, value []byte) error {
-	ks.store[string(key)] = string(value)
+func (ks *mockKeyStore) Save(key string, value []byte) error {
+	ks.store[key] = string(value)
 	return nil
 }
 
-func (ks *mockKeyStore) Get(key []byte) ([]byte, error) {
-	if value, ok := ks.store[string(key)]; ok {
+func (ks *mockKeyStore) Get(key string) ([]byte, error) {
+	if value, ok := ks.store[key]; ok {
 		return []byte(value), nil
 	}
-	return nil, ErrKeyNotFound(string(key))
+	return nil, ErrKeyNotFound(key)
 }
 
 func (ks *mockKeyStore) Clear() error {
@@ -80,8 +80,8 @@ func (ks *mockKeyStore) Clear() error {
 	return nil
 }
 
-func (ks *mockKeyStore) Delete(key []byte) error {
-	delete(ks.store, string(key))
+func (ks *mockKeyStore) Delete(key string) error {
+	delete(ks.store, key)
 	return nil
 }
 

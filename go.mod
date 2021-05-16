@@ -15,6 +15,7 @@ require (
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
+	golang.org/x/mobile v0.0.0-20210220033013-bdb1ca9a1e08 // indirect
 	golang.org/x/oauth2 v0.0.0-20210220000619-9bb904979d93
 	golang.org/x/sys v0.0.0-20210228012217-479acdf4ea46 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
