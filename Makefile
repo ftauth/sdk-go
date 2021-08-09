@@ -1,4 +1,4 @@
-IOS_OUTPUT := ../sdk-ios/FTAuthInternal.xcframework
+IOS_OUTPUT := ../sdk-ios/FTAuthInternal.framework
 ANDROID_OUTPUT := ../sdk-android/ftauthinternal/ftauthinternal.aar
 CODECOV := coverage.txt
 
