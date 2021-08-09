@@ -246,9 +246,13 @@ func (c *Client) Exchange(authResp *AuthorizationCodeResponse) (*http.Client, er
 	log.Debugln("Received refresh token: ", token.RefreshToken)
 
 	// Save tokens to Keychain
-	c.SaveTokens(token.AccessToken, token.RefreshToken)
+	err = c.SaveTokens(token.AccessToken, token.RefreshToken)
+	if err != nil {
+		log.Errorf("Error saving tokens: %v\n", err)
+		return nil, err
+	}
 
-	return oauth2.NewClient(ctx, ft.TokenSource(token)), nil
+	return oauth2.NewClient(context.Background(), ft.TokenSource(token)), nil
 }
 
 // Login triggers the authentication flow and handles redirects

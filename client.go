@@ -140,6 +140,7 @@ func (c *Client) CurrentUser() (*model.UserData, error) {
 	}
 	userURL.Path = "/user"
 
+	c.Debugf("Getting user info from: %v\n", userURL)
 	request, err := http.NewRequest(http.MethodGet, userURL.String(), nil)
 	if err != nil {
 		return nil, err
